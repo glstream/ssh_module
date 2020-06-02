@@ -46,19 +46,11 @@ class ssh_connection:
         TODO: add the transformation between dbfs to local before the sftp.put() 
         """
         ssh_client=paramiko.SSHClient()
-        # ssh_client.load_host_keys('/Users/glstream/Documents/GitHub/playground2/2020/sshTesting/ssh_key/pub_key')
+        
         if self.pub_key is not None:
-
-            # pub_key_temp_file_name =  self.pub_key_temp_file_name()
-            # pub_key_temp_file_name =  self.pub_key_temp_file_name(self.pub_key)
-            # ssh_client.load_host_keys(pub_key_temp_file_name)
-            # known_pub_key = self.pub_key.split(' ', 3)
-            # print(known_pub_key)
-            # ssh_client.missing_host_key(public_key)
-            t1 = paramiko.MissingHostKeyPolicy()
-            t1.missing_host_key(ssh_client, self.host, self.pub_key)
-            ssh_client.set_missing_host_key_policy(t1)
-
+            host_key_policy = paramiko.MissingHostKeyPolicy()
+            host_key_policy.missing_host_key(ssh_client, self.host, self.pub_key)
+            ssh_client.set_missing_host_key_policy(host_key_policy)
         else:
             ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
@@ -79,9 +71,7 @@ class ssh_connection:
                                 ,pkey=priv_key_obj
                                 ,look_for_keys=False
                                 )
-            print('Connection Successful.')
-            # if self.pub_key is not None:
-            #     os.remove(pub_key_temp_file_name)      
+            print('Connection Successful.')    
             #Raises BadHostKeyException,AuthenticationException,SSHException,socket erro
         except (Exception) as e:
             return print('Error connecting to ssftp: {}'.format(e))
