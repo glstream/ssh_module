@@ -48,9 +48,16 @@ class ssh_connection:
         ssh_client=paramiko.SSHClient()
         # ssh_client.load_host_keys('/Users/glstream/Documents/GitHub/playground2/2020/sshTesting/ssh_key/pub_key')
         if self.pub_key is not None:
+
             # pub_key_temp_file_name =  self.pub_key_temp_file_name()
-            pub_key_temp_file_name =  self.pub_key_temp_file_name(self.pub_key)
-            ssh_client.load_host_keys(pub_key_temp_file_name)
+            # pub_key_temp_file_name =  self.pub_key_temp_file_name(self.pub_key)
+            # ssh_client.load_host_keys(pub_key_temp_file_name)
+            # known_pub_key = self.pub_key.split(' ', 3)
+            # print(known_pub_key)
+            # ssh_client.missing_host_key(public_key)
+            t1 = paramiko.MissingHostKeyPolicy()
+            t1.missing_host_key(ssh_client, self.host, self.pub_key)
+            ssh_client.set_missing_host_key_policy(t1)
 
         else:
             ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -73,8 +80,8 @@ class ssh_connection:
                                 ,look_for_keys=False
                                 )
             print('Connection Successful.')
-            if self.pub_key is not None:
-                os.remove(pub_key_temp_file_name)      
+            # if self.pub_key is not None:
+            #     os.remove(pub_key_temp_file_name)      
             #Raises BadHostKeyException,AuthenticationException,SSHException,socket erro
         except (Exception) as e:
             return print('Error connecting to ssftp: {}'.format(e))
@@ -85,15 +92,19 @@ class ssh_connection:
         lines = stdout.readlines()
         total_target_size_string = [x.strip('\n') for x in lines]
         total_target_size = int(total_target_size_string[0])
-
+        print(total_target_size)
         source_file_size = os.stat(source_file).st_size
 
         if source_file_size > total_target_size:
             print("Source file may be larger that the disk size of the sftp host.")
         
         sftp_client = ssh_client.open_sftp()
-        sftp_client.put(source_file,target_file)
-        print('Payload Sent.')
+        try:
+            sftp_client.put(source_file,target_file)
+            print('Payload Sent.')
+        except PermissionError as e:
+            print("Error: {}".format(e))
+        
 
         if meta_data is not False:
             meta_data = self.manifest_file_create(source_file, target_file, source_file_size)
@@ -101,7 +112,7 @@ class ssh_connection:
                 manifest_file = sftp_client.file(meta_data[0], 'a', -1)
                 manifest_file.write(json.dumps(meta_data[1]))
                 manifest_file.flush()
-                print('Manifest Sent.')
+                print('Manifest file sent.')
             except Exception as e:
                 print('Error while sending manifest file: {}'.format(e))
 
