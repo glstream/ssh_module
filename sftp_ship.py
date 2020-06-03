@@ -1,35 +1,18 @@
-import paramiko, sys, os, io, json, tempfile
+import paramiko, sys, os, io, json
 from datetime import datetime
 
-class ssh_connection:
-    def __init__(self, 
-                host, 
-                userName, 
-                pw=None, 
-                port=22, 
-                pub_key=None, 
-                priv_key=None):
+class transport_connection:
+    def __init__(self, host, user_name=None, pw=None, port=22, priv_key=None,host_key=None):
 
         self.host = host
-        self.userName = userName 
+        self.user_name = user_name 
         self.pw = pw
         self.port = port 
-        self.pub_key = pub_key
         self.priv_key = priv_key
-
-
-    @staticmethod
-    def pub_key_temp_file_name(pub_key):
-        pub_key_bytes_obj = pub_key.encode()
-        temp = tempfile.NamedTemporaryFile(delete=False)
-        temp.write(pub_key_bytes_obj)
-        file_name = temp.name
-        return file_name
+        self.host_key = host_key
 
     @staticmethod
-    def manifest_file_create(source_file, 
-                            target_file, 
-                            source_file_size):
+    def manifest_file_create(source_file, target_file, source_file_size):
                             
         timestamp = datetime.strftime(datetime.now(), "%Y%m%d%H%M%S") 
         manifest_filename = '{}.manifest'.format(target_file, timestamp)
@@ -41,56 +24,49 @@ class ssh_connection:
             }
         return manifest_filename,source_file_metadata
 
-    def send_file(self, source_file, target_file, meta_data=True, done_status=True, pub_key=None, priv_key=None):
+    def send_file(self, source_file, target_file, meta_data=True, done_status=True, priv_key=None):
         """
         TODO: add the transformation between dbfs to local before the sftp.put() 
         """
-        ssh_client=paramiko.SSHClient()
-        
-        if self.pub_key is not None:
-            host_key_policy = paramiko.MissingHostKeyPolicy()
-            host_key_policy.missing_host_key(ssh_client, self.host, self.pub_key)
-            ssh_client.set_missing_host_key_policy(host_key_policy)
-        else:
-            ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
+        transport = paramiko.Transport(self.host)
+
+        if self.host_key is not None:
+            host_key = paramiko.RSAKey.from_private_key(self.host_key)
+
+        else:
+            host_key = self.host_key 
+        
         # setup logging
         paramiko.util.log_to_file("/Users/glstream/Documents/GitHub/playground2/2020/sshTesting/ssh_module/logs/demo_sftp.log")
 
         passwd = self.pw if self.pw is not None else None
+        user_name = self.user_name if self.user_name is not None else ""
 
         #PRIVATE KEY TERNERAY AND CREATING FILE OBJECT
         key_file_obj = io.StringIO(self.priv_key)
         priv_key_obj = paramiko.RSAKey.from_private_key(key_file_obj) if self.priv_key != None else None
         
         try:
-            ssh_client.connect(hostname= self.host
-                                ,username=self.userName
-                                ,password=passwd
-                                ,port=self.port
-                                ,pkey=priv_key_obj
-                                ,look_for_keys=False
-                                )
+            transport.connect(hostkey = host_key,
+                            username = user_name,
+                            password = passwd,
+                            pkey = priv_key_obj
+                            )
+
             print('Connection Successful.')    
-            #Raises BadHostKeyException,AuthenticationException,SSHException,socket erro
+
         except (Exception) as e:
-            return print('Error connecting to ssftp: {}'.format(e))
+            return print('Error connecting to sftp: {}'.format(e))
             sys.exit(0)
         
-        stdin, stdout, stderr = ssh_client.exec_command("df -P --total | grep 'total' | awk \'{print $4}\'")
-        stdout.channel.recv_exit_status()
-        lines = stdout.readlines()
-        total_target_size_string = [x.strip('\n') for x in lines]
-        total_target_size = int(total_target_size_string[0])
-        print(total_target_size)
         source_file_size = os.stat(source_file).st_size
-
-        if source_file_size > total_target_size:
-            print("Source file may be larger that the disk size of the sftp host.")
         
-        sftp_client = ssh_client.open_sftp()
+        sftp_client = paramiko.SFTPClient.from_transport(transport,0,0) 
         try:
-            sftp_client.put(source_file,target_file)
+            sftp_client.put(localpath=source_file,
+                            remotepath=target_file)
+
             print('Payload Sent.')
         except PermissionError as e:
             print("Error: {}".format(e))
